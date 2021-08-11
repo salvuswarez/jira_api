@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
+# Name: iJira.py 
+# Created by Cody Hughes 
+# created date: 08/11/2021
+# current version: 1
+# 
+# Description:
+#   This interface is intended to offer access to all data stored within Jira. It requires no manual login as it uses a 
+# preset authentication. 
+#
+#
 
+    
 from jira import JIRA
 
 from ast import literal_eval as le

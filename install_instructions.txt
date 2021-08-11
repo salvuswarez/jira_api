@@ -5,6 +5,7 @@ HOW TO SETUP APP ENVIRONMENT
 Requirements for base environment:
     *Must be off the VPN for packages to install possibly need conda-pack
         conda install -c conda-forge conda-unpack 
+        Reach out to Cody.hughes@fema.dhs.gov for path to stored environment package jira_api_env.tar.gz
 
 
 1.  Create a folder to place the environment in
