@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# Name: jira_data_pull.py
+# Create by: Cody Hughes
+# created date: 08/11/2021
+#
+# Description:
+#   This is a starting point for using the iJira interface. Currently this is more of a test area until a more formal 
+# and detailed solution is developed.
 
 from iJira import iJira
 
@@ -40,17 +47,17 @@ if __name__ == '__main__':
     #japi.export_issues_report(limit=50)
 
     # components report
-    #japi.export_components_report(f_path='\\\\hqli2f8\hqshare\\Office of Policy and Program Analysis (OPPA)\\Enterprise Analytics Division\\DashboardProjects\\TableauDataSources\\Jira_FRD')
+    #japi.export_components_report()
 
     # labels report
-    #japi.export_label_report(f_path='\\\\hqli2f8\hqshare\\Office of Policy and Program Analysis (OPPA)\\Enterprise Analytics Division\\DashboardProjects\\TableauDataSources\\Jira_FRD')
+    #japi.export_label_report()
 
     # comments report
-    #japi.export_comments_report(f_path='\\\\hqli2f8\hqshare\\Office of Policy and Program Analysis (OPPA)\\Enterprise Analytics Division\\DashboardProjects\\TableauDataSources\\Jira_FRD')
+    #japi.export_comments_report()
 
     # linked issues / this might also be subtasks
     #japi.export_issue_links_report(limit=100)
     
     # watchers report
-    #japi.export_watchers_report(f_path='\\\\hqli2f8\hqshare\\Office of Policy and Program Analysis (OPPA)\\Enterprise Analytics Division\\DashboardProjects\\TableauDataSources\\Jira_FRD')
+    #japi.export_watchers_report()
 
