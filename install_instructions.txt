@@ -1,0 +1,31 @@
+
+
+HOW TO SETUP APP ENVIRONMENT
+
+Requirements for base environment:
+    *Must be off the VPN for packages to install possibly need conda-pack
+        conda install -c conda-forge conda-unpack 
+
+
+1.  Create a folder to place the environment in
+        Easiest to create folder in directory of the app IE ./jira_api/jira_api_env
+
+2.  Unzip the tar file for the environment
+        in your base environment terminal
+            tar -xzf path/to/jira_api_env.tar.gz -C "your/folder/location/here/to/env"
+
+3.  Activate the newly unzipped env
+        conda activate path/to/folder/for/env
+
+4.  Unpack environment
+        conda-unpack
+
+
+
+
+RUNNING THE TOOL
+
+*Still in testing
+open the jira_data_pull.py file and run it. this file contains all the base dataset pulls.
+
+the iJira file is the main interface to the jire python library.
