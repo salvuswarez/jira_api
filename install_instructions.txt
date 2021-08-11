@@ -2,31 +2,42 @@
 
 HOW TO SETUP APP ENVIRONMENT
 
+Reach out to Cody.hughes@fema.dhs.gov for path to stored python environment package jira_api_env.tar.gz
+
 Requirements for base environment:
-    *Must be off the VPN for packages to install possibly need conda-pack
+    *Must be off the VPN for packages to install, possibly need conda-pack
         conda install -c conda-forge conda-unpack 
-        Reach out to Cody.hughes@fema.dhs.gov for path to stored environment package jira_api_env.tar.gz
 
 
 1.  Create a folder to place the environment in
-        Easiest to create folder in directory of the app IE ./jira_api/jira_api_env
+        Easiest to create folder in directory of the app IE ./jira_api/app_env
 
 2.  Unzip the tar file for the environment
         in your base environment terminal
             tar -xzf path/to/jira_api_env.tar.gz -C "your/folder/location/here/to/env"
 
 3.  Activate the newly unzipped env
-        conda activate path/to/folder/for/env
-
-4.  Unpack environment
-        conda-unpack
-
-
+        path/to/folder/for/env/scripts/activate
 
 
 RUNNING THE TOOL
 
 *Still in testing
-open the jira_data_pull.py file and run it. this file contains all the base dataset pulls.
+Open the jira_data_pull.py file and run it. this file contains all the base dataset pulls.
 
-the iJira file is the main interface to the jire python library.
+The iJira.py file is the main interface to the jira python library.
+
+Structure:
+Jira_Api/ - main app folder
+        app_env/ - folder ready for setup of app environment.
+        auth/ - default location for authentication files.
+        data/ - Default location for data exports.
+        logs/ - Location for log file storage.
+        __init__.py - Used for initialization of the Jira_Api folder.
+        .gitignore - File containing items or folders to ignore from git.
+        conda_requirements.txt - File containing required packages for loading dependencies with conda.
+        pip_requirements.txt - File containing required packages for loading dependencies with pip.
+        jira_data_pull.py - File containing usage examples for the iJira.py (iJira API).
+        jira_testing.py - file containing test cases and calls against Jira-Python library itself.
+        setup.py - place holder for any setup config info.
+        iJira.py - The interface / api itself. This is where the core logic is. 
