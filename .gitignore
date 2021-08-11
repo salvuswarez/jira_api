@@ -5,12 +5,12 @@ auth/auth_dict.txt
 auth/oauth.pem
 auth/oauth.pub
 .vscode/
-app_env/.*
-data/.*
+app_env/*.*
+data/*.*
 logfile.log
 jira_api_env.tar.gz
 jira_api_env/
-logs/.*
+logs/*.*
 _archive/
 # Byte-compiled / optimized / DLL files
 __pycache__/
