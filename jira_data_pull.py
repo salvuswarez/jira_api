@@ -10,7 +10,6 @@ from iJira import iJira
 
 import logging
 import sys
-#from jira import JIRA
 
 
 #setup logger
@@ -39,7 +38,7 @@ if __name__ == '__main__':
     run()
 
     # perform auth to activate connection to api
-    japi = iJira(r'path\to\cert')
+    japi = iJira(r'.\auth\oauth.pem')
     
     # issues report
     #print(japi.get_issues(limit=25,return_df=True))

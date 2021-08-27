@@ -449,7 +449,6 @@ class iJira():
             str: The path to where the file was saved. 
         """
         
-        #now = datetime.now() _{now.strftime("%Y_%m_%d_%H_%M")}
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_issues(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc,index=False)
 
@@ -472,7 +471,6 @@ class iJira():
             str: The path to where the file was saved. 
         """
         
-        #now = datetime.now()
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_issue_links(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
@@ -495,7 +493,6 @@ class iJira():
             str: The path to where the file was saved. 
         """
         
-        #now = datetime.now()
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_comments(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
@@ -518,7 +515,6 @@ class iJira():
             str: The path to where the file was saved. 
         """
         
-        #now = datetime.now()
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_components(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
@@ -541,7 +537,6 @@ class iJira():
             str: The path to where the file was saved. 
         """
         
-        #now = datetime.now()
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_labels(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
@@ -564,7 +559,6 @@ class iJira():
             str: The path to where the file was saved. 
         """
         
-        #now = datetime.now()
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_watchers(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 

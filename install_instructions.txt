@@ -38,6 +38,4 @@ Jira_Api/ - main app folder
         conda_requirements.txt - File containing required packages for loading dependencies with conda.
         pip_requirements.txt - File containing required packages for loading dependencies with pip.
         jira_data_pull.py - File containing usage examples for the iJira.py (iJira API).
-        jira_testing.py - file containing test cases and calls against Jira-Python library itself.
-        setup.py - place holder for any setup config info.
         iJira.py - The interface / api itself. This is where the core logic is. 
