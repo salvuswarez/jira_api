@@ -25,7 +25,7 @@ def run():
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     handlers = [file_handler,console_handler]
     logging.basicConfig(level = logging.DEBUG,
@@ -38,26 +38,25 @@ def run():
 if __name__ == '__main__':
     run()
 
-    save_loc = r'\\hqli2f8\hqshare\Office of Policy and Program Analysis (OPPA)\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
     # perform auth to activate connection to api
-    japi = iJira(r'.\auth\oauth.pem')
+    japi = iJira(r'path\to\cert')
     
     # issues report
     #print(japi.get_issues(limit=25,return_df=True))
-    japi.export_issues_report(f_path=save_loc)
+    japi.export_issues_report(limit=25)
 
     # components report
-    japi.export_components_report(f_path=save_loc)
+    #japi.export_components_report(f_path=save_loc)
 
     # labels report
-    japi.export_label_report(f_path=save_loc)
+    #japi.export_label_report(f_path=save_loc)
 
     # comments report
-    japi.export_comments_report(f_path=save_loc)
+    #japi.export_comments_report(f_path=save_loc)
 
     # linked issues / this might also be subtasks
-    japi.export_issue_links_report(f_path=save_loc)
+    #japi.export_issue_links_report(f_path=save_loc)
     
     # watchers report
-    japi.export_watchers_report(f_path=save_loc)
+    #japi.export_watchers_report(f_path=save_loc)
 
