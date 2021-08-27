@@ -24,7 +24,7 @@ from typing import Optional
 _log = logging.getLogger(__name__)
 
 
-class iJira:
+class iJira():
     """Interface for Jira API commands
     """
     __cert_file: str
@@ -112,7 +112,7 @@ class iJira:
             Defaults to list, but able to return pandas dataframe if needed
         """
         
-        # reuse a previous pull of issues it it's not empty
+        # reuse a previous pull of issues if it's not empty
         if force_refresh or len(self.__issues) == 0:
             _log.info('Refreshing Issues...')
             
@@ -132,7 +132,9 @@ class iJira:
             _log.info(f'{len(self.__issues)} found.')
             
         if return_df:
-            return pd.DataFrame([i.record for i in self.__issues])
+            df = pd.DataFrame([i.record for i in self.__issues])
+            df.insert(0, 'refresh_date', pd.to_datetime('now').replace(microsecond=0))
+            return df
         else:
             return self.__issues
 
@@ -192,7 +194,8 @@ class iJira:
                                             'link_inward_desc':l.inward_descr,
                                             'link_outward_desc':l.outward_descr,
                                             'inward_issue_key':inward_key,
-                                            'outward_issue_key':outward_key}
+                                            'outward_issue_key':outward_key,
+                                            'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
             
             # set var to hold previous pull of links
             self.__issue_links = results
@@ -201,7 +204,6 @@ class iJira:
         # determine how to return results; either dataframe | dict
         if return_df:
             df = pd.DataFrame.from_dict(self.__issue_links,orient='index')
-            #df.index.name = 'Issue_Key'
             return df
         else:
             return self.__issue_links
@@ -248,7 +250,8 @@ class iJira:
                     rownum += 1
                     results[f'{rownum}']={'issue_key':issue.key,
                                             'comment_id':c.id,
-                                            'comment_body':c.body}
+                                            'comment_body':c.body,
+                                            'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
             
             # set var to hold commments
             self.__comments = results
@@ -257,7 +260,6 @@ class iJira:
         # determine how to return results; either dataframe | dict
         if return_df:
             df = pd.DataFrame.from_dict(self.__comments,orient='index')
-            #df.index.name = 'Issue_Key'
             return df
         else:
             return self.__comments    
@@ -304,7 +306,8 @@ class iJira:
                     rownum += 1
                     results[f'{rownum}']={'issue_key':issue.key,
                                             'component_id': c.id,
-                                            'component_name':c.name}
+                                            'component_name':c.name,
+                                            'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
             
             # set var for component storage
             self.__components = results
@@ -313,7 +316,6 @@ class iJira:
         # determine how to return results; either dataframe | dict
         if return_df:
             df = pd.DataFrame.from_dict(self.__components,orient='index')
-            #df.index.name = 'Issue_Key'
             return df
         else:
             return self.__components
@@ -358,7 +360,8 @@ class iJira:
                 for l in issue.labels:
                     rownum += 1
                     results[f'{rownum}']={'issue_key':issue.key,
-                                            'label_name':l}
+                                            'label_name':l,
+                                            'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
                     
             # set var for storage
             self.__labels = results
@@ -367,7 +370,6 @@ class iJira:
         # determine how to return results; either dataframe | dict
         if return_df:
             df = pd.DataFrame.from_dict(self.__labels,orient='index')
-            #df.index.name = 'Issue_Key'
             return df
         else:
             return self.__labels
@@ -417,15 +419,15 @@ class iJira:
                                             'watcher_name':w.name,
                                             'watcher_email':w.emailAddress,
                                             'watcher_display_name':w.displayName,
-                                            'watcher_active':w.active}
+                                            'watcher_active':w.active,
+                                            'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
             
             self.__watchers = results
             _log.info(f'{len(self.__watchers)} found.')
-            
+        
         # determine how to return results; either dataframe | dict
         if return_df:
             df = pd.DataFrame.from_dict(self.__watchers,orient='index')
-            #df.index.name = 'Issue_Key'
             return df
         else:
             return self.__watchers
@@ -447,8 +449,8 @@ class iJira:
             str: The path to where the file was saved. 
         """
         
-        now = datetime.now()
-        save_loc = rf'{f_path}\{f_name}_{now.strftime("%Y_%m_%d_%H_%M")}.xlsx'
+        #now = datetime.now() _{now.strftime("%Y_%m_%d_%H_%M")}
+        save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_issues(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc,index=False)
 
         return save_loc
@@ -470,8 +472,8 @@ class iJira:
             str: The path to where the file was saved. 
         """
         
-        now = datetime.now()
-        save_loc = rf'{f_path}\{f_name}_{now.strftime("%Y_%m_%d_%H_%M")}.xlsx'
+        #now = datetime.now()
+        save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_issue_links(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
@@ -493,8 +495,8 @@ class iJira:
             str: The path to where the file was saved. 
         """
         
-        now = datetime.now()
-        save_loc = rf'{f_path}\{f_name}_{now.strftime("%Y_%m_%d_%H_%M")}.xlsx'
+        #now = datetime.now()
+        save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_comments(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
@@ -516,8 +518,8 @@ class iJira:
             str: The path to where the file was saved. 
         """
         
-        now = datetime.now()
-        save_loc = rf'{f_path}\{f_name}_{now.strftime("%Y_%m_%d_%H_%M")}.xlsx'
+        #now = datetime.now()
+        save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_components(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
@@ -539,8 +541,8 @@ class iJira:
             str: The path to where the file was saved. 
         """
         
-        now = datetime.now()
-        save_loc = rf'{f_path}\{f_name}_{now.strftime("%Y_%m_%d_%H_%M")}.xlsx'
+        #now = datetime.now()
+        save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_labels(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
@@ -562,8 +564,8 @@ class iJira:
             str: The path to where the file was saved. 
         """
         
-        now = datetime.now()
-        save_loc = rf'{f_path}\{f_name}_{now.strftime("%Y_%m_%d_%H_%M")}.xlsx'
+        #now = datetime.now()
+        save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_watchers(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
