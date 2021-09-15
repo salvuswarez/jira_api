@@ -36,6 +36,7 @@ class iJira():
     __comments: dict = {}
     __components: dict = {}
     __labels: dict = {}
+    __histories: dict = {}
     __watchers: dict = {}
 
 
@@ -58,7 +59,7 @@ class iJira():
             
         except FileNotFoundError as e:
             # if no file found push error
-            _log.error(f'No PEM file found in given location: {self.__cert_file}',exec_info=True)
+            _log.error(f'No PEM file found in given location: {self.__cert_file}',exc_info=True)
             raise FileNotFoundError("No .PEM file found!")
 
         # get auth dict from txt file
@@ -72,7 +73,7 @@ class iJira():
             self.__is_logged_in = True
         except Exception as e:
             #TODO: replace exception with proper faild login exception
-            _log.error('Failed to login',exec_info=True)
+            _log.error('Failed to login',exc_info=True)
             self.__is_logged_in = False
 
 
@@ -125,11 +126,11 @@ class iJira():
                 _log.info(f'Issue Count: {limit} issue(s) found.',exc_info=True)
 
             # get issues list of dict
-            self.__issues = [Jira_Issue(self.__jira,i) 
+            self.__issues = [Jira_Issue(self.__jira,i.key) 
                                 for i in self.__jira.search_issues(
                                     f'project = {project_key}',maxResults=limit)]
             
-            _log.info(f'{len(self.__issues)} found.')
+            _log.info(f'{len(self.__issues)} Issues retreived.')
             
         if return_df:
             df = pd.DataFrame([i.record for i in self.__issues])
@@ -199,7 +200,7 @@ class iJira():
             
             # set var to hold previous pull of links
             self.__issue_links = results
-            _log.info(f'{len(self.__issue_links)} found')
+            _log.info(f'{len(self.__issue_links)} Issue links retrieved')
             
         # determine how to return results; either dataframe | dict
         if return_df:
@@ -207,6 +208,64 @@ class iJira():
             return df
         else:
             return self.__issue_links
+
+
+    def get_histories(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+        """Get Historic records for all Issues
+
+        Parameters:
+        -----
+            limit (Optional[int], optional): Number of issues to return can be limited. Default is to return All.
+            project_key (Optional[str], optional): Specifiy a Project Key to pull issues from. Defaults to `'FRD'`.
+            return_df (bool, optional): Option to return as Pandas Dataframe instead of dict. Defaults to `False`.
+            force_refresh (bool, optional): Default is `False` - if the issues have already been pulled, dont pull again. 
+                                            If `True` - run a fresh pull.
+                                            
+        Returns:
+        -----
+            dict: By default it returns a dictionary of Historic Records
+        """
+        
+        if force_refresh or len(self.__histories) == 0:
+            _log.info('Refreshing Histories...')
+            
+            # check for limit
+            if limit is None:
+                # get total issue count
+                limit = int(self.__jira.search_issues(
+                            f'project = {project_key}',
+                                maxResults=1,startAt=0,json_result=True)['total'])
+
+            # get issues
+            issues = self.get_issues(limit=limit,project_key=project_key,force_refresh=force_refresh)
+
+            # setup empty dict for results
+            results = {}
+            
+            #add rownum for indexing
+            rownum = 0
+            
+            # loop through all issues and build dict of all components
+            for issue in issues:
+                for rec in issue.change_history:
+                    rownum += 1
+                    
+                    results[f'{rownum}']={'issue_key':issue.key,
+                                            'date_of_change':rec.updated_date,
+                                            'field':rec.field_name,
+                                            'value':rec.value,
+                                            'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
+            
+            # set var to hold previous pull of links
+            self.__histories = results
+            _log.info(f'{len(self.__histories)} Historic Changes retrieved')
+            
+        # determine how to return results; either dataframe | dict
+        if return_df:
+            df = pd.DataFrame.from_dict(self.__histories,orient='index')
+            return df
+        else:
+            return self.__histories
 
 
     def get_comments(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
@@ -255,7 +314,7 @@ class iJira():
             
             # set var to hold commments
             self.__comments = results
-            _log.info(f'{len(self.__comments)} found.')
+            _log.info(f'{len(self.__comments)} Comments retrieved')
             
         # determine how to return results; either dataframe | dict
         if return_df:
@@ -311,7 +370,7 @@ class iJira():
             
             # set var for component storage
             self.__components = results
-            _log.info(f'{len(self.__components)} found.')
+            _log.info(f'{len(self.__components)} Components retrieved')
             
         # determine how to return results; either dataframe | dict
         if return_df:
@@ -365,7 +424,7 @@ class iJira():
                     
             # set var for storage
             self.__labels = results
-            _log.info(f'{len(self.__labels)} found.')
+            _log.info(f'{len(self.__labels)} Labels retrieved')
             
         # determine how to return results; either dataframe | dict
         if return_df:
@@ -423,7 +482,7 @@ class iJira():
                                             'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
             
             self.__watchers = results
-            _log.info(f'{len(self.__watchers)} found.')
+            _log.info(f'{len(self.__watchers)} Watchers retrieved')
         
         # determine how to return results; either dataframe | dict
         if return_df:
@@ -473,6 +532,27 @@ class iJira():
         
         save_loc = rf'{f_path}\{f_name}.xlsx'
         self.get_issue_links(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
+
+        return save_loc
+
+    def export_change_history_report(self,f_name:str='ChangeHistory',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+        """Saves historic report out to excel xlsx file
+
+        Parameters:
+        -----
+            f_name (str, optional): File name (NO EXTENSION). Defaults to `'IssueLinks'`.
+            f_path (str, optional): File Path . Defaults to r`'.\data'`.
+            limit (Optional[int], optional): Number of issues to search through, if none searches all found. Default is to return All.
+            force_refresh (bool, optional): Default is `False` - if the issue links have already been pulled, dont pull again. 
+                                            If `True` - run a fresh pull.
+                                            
+        Returns:
+        -----
+            str: The path to where the file was saved. 
+        """
+        
+        save_loc = rf'{f_path}\{f_name}.xlsx'
+        self.get_histories(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
@@ -610,6 +690,8 @@ class Jira_Issue():
     __cur_status: str
     __epic_key: str
     #__fixed_version: str    # TODO: Not yet implemented
+    __historic_records: list = []
+    __histories: list = []
     __is_subtask:bool
     __issue_age_txt: str
     __issue_key: str
@@ -628,6 +710,7 @@ class Jira_Issue():
     __progress_total: int
     __reporter_key: str
     __reporter_name: str
+    #__statuscategorychangedate: str
     __summary: str
     __vote_count: int
     __watchers: dict = {}
@@ -651,14 +734,17 @@ class Jira_Issue():
 
     def __load_issue(self):
         """initial load up of issue object without lists"""
+        _log.debug(f'Loading Issue : {self.__issue_key}')
+        
         jira = self.__authorized_jira
-        issue = jira.issue(self.__issue_key)
-
+        issue = jira.issue(self.__issue_key,expand='changelog')
+            
         try:
             # does not get added as field for output since it's a dict / list
             self.__watchers = jira.watchers(issue).watchers
             self.__comments = jira.comments(issue)
             self.__components = issue.fields.components
+            self.__histories = issue.changelog.histories
             self.__issue_links = [Issue_Link(self.__authorized_jira,l) for l in issue.fields.issuelinks]
             self.__labels = issue.fields.labels
 
@@ -698,12 +784,13 @@ class Jira_Issue():
             self.__issue_record['linked_issue_count'] = self.__linked_issue_count = len(self.__issue_links)
             self.__issue_record['label_count'] = self.__label_count = len(self.__labels)
             self.__issue_record['vote_count'] = self.__vote_count = issue.fields.votes.votes
+            #self.__issue_record['status_category_change_date'] = self.__statuscategorychangedate = issue.fields.statuscategorychangedate
+
             
         except AttributeError as e:
             # Error is thrown when a field is empty.
             # Just ignore and move on, as Pandas turns it into None
-            
-            pass
+            _log.debug(f'Failed to load a property for issue: {self.__issue_key}',exc_info=True)
 
         # TODO: build out properties that pull in lists of data listed below. Return as dataframes
         #self.__fixed_version = issue.fields.fixVersions returns a list handle in own method
@@ -727,6 +814,19 @@ class Jira_Issue():
             datetime.date
         """
         return self.__created_dt
+    
+    @property
+    def change_history(self)->list:
+        """List of historic changes to this issue
+
+        Returns:
+            list: Returns a list of Historic Record items
+        """
+        for rec in self.__histories:
+            for item in rec.items:
+                self.__historic_records.append(Historic_Record(rec.created,item.field,item.toString))
+                
+        return self.__historic_records
     
     @property
     def aggregate_progress(self)->int:
@@ -1054,6 +1154,7 @@ class Jira_Issue():
         """
         return self.__epic_key
 
+        
     @classmethod
     def clean_html(cls,raw_html:str='')->str:
             """Static method for cleaning out HTML tags from text
@@ -1074,6 +1175,40 @@ class Jira_Issue():
             return cleantext
 
 
+class Historic_Record():
+    """Contains a past updated field and it's past value"""
+
+    __update_date: datetime
+    __field_name: str
+    __value: str
+    
+    
+    def __init__(self,date_change:str,field_name:str,value:str):
+        self.__update_date = datetime.strptime(date_change, "%Y-%m-%dT%H:%M:%S.%f%z").date()
+        self.__field_name = field_name
+        self.__value = value
+        #self.__format_value()
+        
+        
+    # def __format_value(self):
+    #     if 'date' in self.__field_name:
+    #         self.__value = str(datetime.strptime(self.__value, "%Y-%m-%dT%H:%M:%S.%f%z").date())
+            
+            
+    @property
+    def updated_date(self)->datetime:
+        return self.__update_date
+    
+    @property
+    def field_name(self)->str:
+        return self.__field_name
+    
+    @property
+    def value(self)->str:
+        return self.__value
+    
+    
+    
 class Issue_Link():
     #contains Issue link details, like a list of issue objects, issue link type
     __id: str

@@ -7,7 +7,6 @@
 # and detailed solution is developed.
 
 from iJira import iJira
-
 import logging
 import sys
 
@@ -36,26 +35,30 @@ def run():
     
 if __name__ == '__main__':
     run()
-
+    save_loc = r'\\path\to\save\loc'
+    
     # perform auth to activate connection to api
-    japi = iJira(r'.\auth\oauth.pem')
+    japi = iJira(r'.\path\to\cert')
     
     # issues report
-    #print(japi.get_issues(limit=25,return_df=True))
-    japi.export_issues_report(limit=25)
+    #print(japi.get_issues(limit=100,return_df=True))
+    japi.export_issues_report(f_path=save_loc)
 
+    # change history report
+    japi.export_change_history_report(f_path=save_loc)
+    
     # components report
-    #japi.export_components_report(f_path=save_loc)
+    japi.export_components_report(f_path=save_loc)
 
     # labels report
-    #japi.export_label_report(f_path=save_loc)
+    japi.export_label_report(f_path=save_loc)
 
     # comments report
-    #japi.export_comments_report(f_path=save_loc)
+    japi.export_comments_report(f_path=save_loc)
 
     # linked issues / this might also be subtasks
-    #japi.export_issue_links_report(f_path=save_loc)
+    japi.export_issue_links_report(f_path=save_loc)
     
     # watchers report
-    #japi.export_watchers_report(f_path=save_loc)
+    japi.export_watchers_report(f_path=save_loc)
 
