@@ -1184,15 +1184,15 @@ class Historic_Record():
     
     
     def __init__(self,date_change:str,field_name:str,value:str):
-        self.__update_date = datetime.strptime(date_change, "%Y-%m-%dT%H:%M:%S.%f%z").date()
+        self.__update_date = datetime.strptime(date_change, "%Y-%m-%dT%H:%M:%S.%f%z").strftime("%Y/%m/%d %H:%M")
         self.__field_name = field_name
         self.__value = value
-        #self.__format_value()
+        self.__format_value()
         
         
-    # def __format_value(self):
-    #     if 'date' in self.__field_name:
-    #         self.__value = str(datetime.strptime(self.__value, "%Y-%m-%dT%H:%M:%S.%f%z").date())
+    def __format_value(self):
+        if 'date' in self.__field_name and self.__value is not None:
+            self.__value = datetime.strptime(self.__value, "%Y-%m-%d %H:%M:%S.%f").strftime("%Y/%m/%d %H:%M:%S")
             
             
     @property
@@ -1210,7 +1210,8 @@ class Historic_Record():
     
     
 class Issue_Link():
-    #contains Issue link details, like a list of issue objects, issue link type
+    """contains Issue link details, like a list of issue objects, issue link type"""
+    
     __id: str
     __type: str
     __inward_desc: str
