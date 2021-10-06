@@ -14,7 +14,7 @@
 from jira import JIRA
 
 from ast import literal_eval as le
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import pandas as pd
 import re
@@ -185,9 +185,9 @@ class iJira():
                     rownum += 1
                     
                     if l.inward_issue:
-                        inward_key = l.inward_issue.key
+                        inward_key = l.inward_issue
                     if l.outward_issue:
-                        outward_key = l.outward_issue.key
+                        outward_key = l.outward_issue
                     
                     results[f'{rownum}']={'issue_key':issue.key,
                                             'link_id':l.link_id,
@@ -248,12 +248,18 @@ class iJira():
             # loop through all issues and build dict of all components
             for issue in issues:
                 for rec in issue.change_history:
+                    # filter for last 3 months only
+                    #if abs(pd.to_datetime(rec.updated_date)-pd.to_datetime(datetime.now().date())).days <=90: 
+                    # set row number for indexing
                     rownum += 1
                     
+                    # build out dict of each record
                     results[f'{rownum}']={'issue_key':issue.key,
+                                            'updated_by':rec.updated_by,                                              
                                             'date_of_change':rec.updated_date,
                                             'field':rec.field_name,
-                                            'value':rec.value,
+                                            'new_value':rec.new_value,
+                                            'old_value':rec.old_value,
                                             'refresh_date':pd.to_datetime('now').replace(microsecond=0)}
             
             # set var to hold previous pull of links
@@ -535,6 +541,7 @@ class iJira():
 
         return save_loc
 
+
     def export_change_history_report(self,f_name:str='ChangeHistory',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves historic report out to excel xlsx file
 
@@ -676,32 +683,34 @@ class Jira_Issue():
     """Contains all details and functionality for a single issue
 
     """
+    DATE_FORMAT = "%Y/%m/%d %H:%M"
+    
     __authorized_jira: JIRA
     __agg_progress: int
     __agg_progress_total: int
     __assignee_name: str
     __assignee_key: str
-    __comments: dict = {}
+    __comments: dict
     __comments_count: int
-    __components: dict = {}
+    __components: dict
     __created_dt: str
     __creator_key: str
     __creator_name: str
     __cur_status: str
     __epic_key: str
-    #__fixed_version: str    # TODO: Not yet implemented
-    __historic_records: list = []
-    __histories: list = []
+    __historic_records: list
+    __histories: list
     __is_subtask:bool
     __issue_age_txt: str
     __issue_key: str
-    __issue_links: list = []
+    __issue_links: list
     __issue_record: dict
     __issue_type: str
-    __labels: dict = {}
+    __labels: dict
     __label_count: int
     __latest_comment: str
     __latest_comment_dt: str
+    __open_days: int
     __priority_type:str
     __priority_descr:str
     __progress: int
@@ -710,10 +719,9 @@ class Jira_Issue():
     __progress_total: int
     __reporter_key: str
     __reporter_name: str
-    #__statuscategorychangedate: str
     __summary: str
     __vote_count: int
-    __watchers: dict = {}
+    __watchers: dict
     __watcher_count: int
     
     
@@ -728,7 +736,42 @@ class Jira_Issue():
 
         self.__issue_key = pIssue_Key
         self.__authorized_jira = pJira
+        self.__agg_progress = None
+        self.__agg_progress_total = None
+        self.__assignee_name = None
+        self.__assignee_key = None
+        self.__comments = {}
+        self.__comments_count = None
+        self.__components = {}
+        self.__created_dt = None
+        self.__creator_key = None
+        self.__creator_name = None
+        self.__cur_status = None
+        self.__epic_key = None
+        self.__historic_records = []
+        self.__histories = []
+        self.__is_subtask = False
+        self.__issue_age_txt = None
+        self.__issue_links = []
         self.__issue_record = {}
+        self.__issue_type = None
+        self.__labels = {}
+        self.__label_count = None
+        self.__latest_comment = None
+        self.__latest_comment_dt = None
+        self.__open_days = 0
+        self.__priority_type = None
+        self.__priority_descr = None
+        self.__progress = None
+        self.__project_key = None
+        self.__project_name = None
+        self.__progress_total = None
+        self.__reporter_key = None
+        self.__reporter_name = None
+        self.__summary = None
+        self.__vote_count = None
+        self.__watchers = {}
+        self.__watcher_count = None
         self.__load_issue()
 
 
@@ -740,61 +783,186 @@ class Jira_Issue():
         issue = jira.issue(self.__issue_key,expand='changelog')
             
         try:
-            # does not get added as field for output since it's a dict / list
             self.__watchers = jira.watchers(issue).watchers
-            self.__comments = jira.comments(issue)
-            self.__components = issue.fields.components
-            self.__histories = issue.changelog.histories
-            self.__issue_links = [Issue_Link(self.__authorized_jira,l) for l in issue.fields.issuelinks]
-            self.__labels = issue.fields.labels
-
-            # start building record
-            self.__issue_record['issue_key'] = self.__issue_key
-            self.__issue_record['created_date'] = self.__created_dt = datetime.strptime(issue.fields.created,'%Y-%m-%dT%H:%M:%S.%f%z').date()
-            self.__issue_record['agg_progress'] = self.__agg_progress = issue.fields.aggregateprogress.progress
-            self.__issue_record['agg_progress_total'] = self.__agg_progress_total = issue.fields.aggregateprogress.total
-            self.__issue_record['latest_comment'] = self.__latest_comment = self.clean_html(str(issue.fields.customfield_18501))
-
-            # if no comment, this field wont exist
-            if issue.fields.customfield_18502:
-                self.__issue_record['latest_comment_date'] = self.__latest_comment_dt = datetime.strptime(issue.fields.customfield_18502,'%Y-%m-%dT%H:%M:%S.%f%z').date()
-            else:
-                self.__issue_record['latest_comment_date'] = self.__latest_comment_dt = None
-
-            self.__issue_record['epic_key'] = self.__epic_key = issue.fields.customfield_10801
-            self.__issue_record['summary'] = self.__summary = issue.fields.summary
-            self.__issue_record['priority_type'] = self.__priority_type = issue.fields.priority.name
-            #self.__issue_record['priority_descr'] = self.__priority_descr = issue.fields.priority.description # seems to fail to find any descriptions
-            self.__issue_record['project_key'] = self.__project_key = issue.fields.project.key
-            self.__issue_record['project_name'] = self.__project_name = issue.fields.project.name
-            self.__issue_record['progress'] = self.__progress = issue.fields.progress.progress
-            self.__issue_record['progress_total'] = self.__progress_total = issue.fields.progress.total
-            self.__issue_record['reporter_key'] = self.__reporter_key = issue.fields.reporter.key
-            self.__issue_record['reporter_name'] = self.__reporter_name = issue.fields.reporter.displayName
-            self.__issue_record['creator_key'] = self.__creator_key = issue.fields.creator.key
-            self.__issue_record['creator_name'] = self.__creator_name = issue.fields.creator.displayName
-            self.__issue_record['current_status'] = self.__cur_status = issue.fields.status.name
-            self.__issue_record['issue_age_txt'] = self.__issue_age_txt = issue.fields.customfield_22332
-            self.__issue_record['assignee_key'] = self.__assignee_key = issue.fields.assignee.key
-            self.__issue_record['assignee_name'] = self.__assignee_name = issue.fields.assignee.displayName
-            self.__issue_record['issue_type'] = self.__issue_type = issue.fields.issuetype.name
-            self.__issue_record['is_subtask'] = self.__is_subtask = issue.fields.issuetype.subtask
-            self.__issue_record['watcher_count'] = self.__watcher_count = len(self.__watchers)
-            self.__issue_record['comment_count'] = self.__comments_count = len(self.__comments)
-            self.__issue_record['linked_issue_count'] = self.__linked_issue_count = len(self.__issue_links)
-            self.__issue_record['label_count'] = self.__label_count = len(self.__labels)
-            self.__issue_record['vote_count'] = self.__vote_count = issue.fields.votes.votes
-            #self.__issue_record['status_category_change_date'] = self.__statuscategorychangedate = issue.fields.statuscategorychangedate
-
-            
-        except AttributeError as e:
+        except AttributeError:
             # Error is thrown when a field is empty.
             # Just ignore and move on, as Pandas turns it into None
-            _log.debug(f'Failed to load a property for issue: {self.__issue_key}',exc_info=True)
+            _log.debug(f'No Watchers for issue: {self.__issue_key}',exc_info=True)
+        
+        try:
+            self.__comments = jira.comments(issue)
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No Comments for issue: {self.__issue_key}',exc_info=True)
+        
+        try:
+            self.__components = issue.fields.components
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No Components for issue: {self.__issue_key}',exc_info=True)   
+        
+        try:
+            self.__histories = issue.changelog.histories
+            #_log.debug(f'issue: {self.key} | history: {self.__histories}')
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No Changelog for issue: {self.__issue_key}',exc_info=True)
+            
+        try:
+            _log.debug(f'Getting Issue Links for : {self.key}')
+            self.__issue_links = [Issue_Link(l) for l in issue.fields.issuelinks]
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No Issue Links for issue: {self.__issue_key}',exc_info=True)
+            
+        try:
+            self.__labels = issue.fields.labels
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No Labels for issue: {self.__issue_key}',exc_info=True)
+            
+        # start building record
+        self.__issue_record['issue_key'] = self.__issue_key
+        self.__issue_record['created_date'] = self.__created_dt = datetime.strptime(issue.fields.created,'%Y-%m-%dT%H:%M:%S.%f%z').date()
+        self.__issue_record['agg_progress'] = self.__agg_progress = issue.fields.aggregateprogress.progress
+        self.__issue_record['agg_progress_total'] = self.__agg_progress_total = issue.fields.aggregateprogress.total
+        self.__issue_record['latest_comment'] = self.__latest_comment = self.clean_html(str(issue.fields.customfield_18501))
 
-        # TODO: build out properties that pull in lists of data listed below. Return as dataframes
-        #self.__fixed_version = issue.fields.fixVersions returns a list handle in own method
+        try:
+            self.__issue_record['latest_comment_date'] = self.__latest_comment_dt = datetime.strptime(issue.fields.customfield_18502,'%Y-%m-%dT%H:%M:%S.%f%z').date()
+        except TypeError:
+            # Error is thrown when a field is empty. So set to None
+            self.__issue_record['latest_comment_date'] = self.__latest_comment_dt = None
+            _log.debug(f'No Comments for issue: {self.__issue_key}',exc_info=True)
+            
+        self.__issue_record['epic_key'] = self.__epic_key = issue.fields.customfield_10801
+        self.__issue_record['summary'] = self.__summary = issue.fields.summary
+        self.__issue_record['priority_type'] = self.__priority_type = issue.fields.priority.name
+        self.__issue_record['project_key'] = self.__project_key = issue.fields.project.key
+        self.__issue_record['project_name'] = self.__project_name = issue.fields.project.name
+        self.__issue_record['progress'] = self.__progress = issue.fields.progress.progress
+        self.__issue_record['progress_total'] = self.__progress_total = issue.fields.progress.total
+        self.__issue_record['reporter_key'] = self.__reporter_key = issue.fields.reporter.key
+        self.__issue_record['reporter_name'] = self.__reporter_name = issue.fields.reporter.displayName
+        self.__issue_record['creator_key'] = self.__creator_key = issue.fields.creator.key
+        self.__issue_record['creator_name'] = self.__creator_name = issue.fields.creator.displayName
+        self.__issue_record['current_status'] = self.__cur_status = issue.fields.status.name
+        self.__issue_record['issue_age_txt'] = self.__issue_age_txt = issue.fields.customfield_22332
+        
+        try:
+            self.__issue_record['assignee_key'] = self.__assignee_key = issue.fields.assignee.key
+            self.__issue_record['assignee_name'] = self.__assignee_name = issue.fields.assignee.displayName
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No Assignee for issue: {self.__issue_key}',exc_info=True)
+            
+        self.__issue_record['issue_type'] = self.__issue_type = issue.fields.issuetype.name
+        self.__issue_record['is_subtask'] = self.__is_subtask = issue.fields.issuetype.subtask
+        self.__issue_record['watcher_count'] = self.__watcher_count = len(self.__watchers)
+        self.__issue_record['comment_count'] = self.__comments_count = len(self.__comments)
+        self.__issue_record['linked_issue_count'] = self.__linked_issue_count = len(self.__issue_links)
+        self.__issue_record['label_count'] = self.__label_count = len(self.__labels)
+        self.__issue_record['vote_count'] = self.__vote_count = issue.fields.votes.votes
+        
+        # set the open and close dates for open age calculation
+        self.__calc_time_open()
+        
+        
+    def __calc_time_open(self):
+        # attempt to calc time an issue is in "open" status   
+        # open is in progress, in review, needs follow up, or scheduled. 
+        # concept is to loop through historic records only looking at status changes
+        # and sum up all time an issue is in the open status. 
+        
+        # these are the status's that are considered open
+        open_status = ['in progress','in review','needs follow up','scheduled']
 
+        # holds total days in open status 
+        days_open = 0
+        
+        # place holders for date diff calc
+        start_date = None
+        end_date = None
+        today = datetime.today()
+        
+        # check to see if any closed records exist
+        closed_recs = len([x.updated_date for x in self.change_history 
+                       if x.field_name.lower() == 'status' 
+                       and x.new_value.lower() not in open_status])
+        
+        # check to see if any open records exist
+        open_recs = len([x.updated_date for x in self.change_history 
+                     if x.field_name.lower() == 'status' 
+                     and x.new_value.lower() in open_status])
+        
+        _log.debug(f'issue: {self.key} | open recs: {open_recs} | closed recs: {closed_recs}')
+        
+        # get list of dates for status changes only
+        historic_records = [x for x in self.change_history 
+                       if x.field_name.lower() == 'status']
+        
+        # need to know what the last record index of the list would be
+        total_recs = closed_recs + open_recs - 1 
+        
+        # var to count what index the loop is on
+        idx = 0
+        
+        # loop through the list of dates to evaluate open time segments
+        for status in historic_records:
+            if status.new_value.lower() in open_status:
+                # it's an open status
+                if start_date is None:
+                    # if a start date has not been set, set it
+                    start_date = datetime.strptime(status.updated_date, self.DATE_FORMAT) - timedelta(hours=4)
+                    _log.debug(f'IDX: {idx} | start date: {start_date}')
+                    
+            else:
+                # if it's not a start date then it is an end date, so set the end date
+                if start_date is not None:
+                    end_date = datetime.strptime(status.updated_date, self.DATE_FORMAT) - timedelta(hours=4)
+                    _log.debug(f'IDX: {idx} | end date: {end_date}')
+            
+            # if there are both open and closed dates, then run a full date calc
+            if open_recs >0 and closed_recs>0:
+                # verify both dates are available to calc diff
+                if end_date is not None and start_date is not None:
+                    days_open += round((end_date - start_date).days)
+                    _log.debug(f'IDX: {idx} | end date: {end_date} - {start_date} = {days_open}')
+                    
+                    # now that we have one segment calculated 
+                    # we reset the dates to prep for the next segment
+                    start_date = None
+                    end_date = None
+                    
+                # if it's the last record and there is no end date yet
+                elif idx == total_recs and start_date is not None:
+                    
+                    # calc start against todays date since the record was reopened
+                    days_open += round((today - start_date).days)
+                    _log.debug(f'IDX: {idx} | end date: {today} - start date: {start_date} = {days_open}')
+            
+            # if there are no open recs, and only a closed rec we defult it to one day
+            elif open_recs == 0 and closed_recs >0:
+                days_open += 1
+                
+                # exit loop
+                break
+            
+            # if there are open recs but no closed recs we compare to todays date
+            elif open_recs > 0 and closed_recs == 0:
+                days_open += round((today - start_date).days)
+                _log.debug(f'end date: {today} - start date: {start_date} = {days_open}')
+                
+                # exit loop since all we need is the first open date
+                break
+            
+            # increment the index to keep up with the loop
+            idx +=1 
+            
+        _log.debug(f'days open: {days_open}')
+        self.__issue_record['open_days'] = self.__open_days = days_open
+         
+    
     @property
     def key(self)->str:
         """Issue Key string from Jira
@@ -816,16 +984,26 @@ class Jira_Issue():
         return self.__created_dt
     
     @property
+    def open_days(self)->int:
+        return self.__open_days
+    
+    @property
     def change_history(self)->list:
         """List of historic changes to this issue
-
         Returns:
             list: Returns a list of Historic Record items
         """
-        for rec in self.__histories:
-            for item in rec.items:
-                self.__historic_records.append(Historic_Record(rec.created,item.field,item.toString))
-                
+        if not self.__historic_records:
+            _log.debug(f'Issue: {self.key} | Change History first load')
+            for rec in self.__histories:
+                if hasattr(rec,'author'):
+                    for item in rec.items:
+                        self.__historic_records.append(Historic_Record(
+                            rec.created,rec.author,item.field,item.toString,item.fromString))
+            
+            _log.debug(f'Historic record count: {len(self.__historic_records)}')
+            _log.debug(f'Issue: {self.key} | Historic Records: {[x.updated_date for x in self.__historic_records]}')
+            
         return self.__historic_records
     
     @property
@@ -1180,21 +1358,37 @@ class Historic_Record():
 
     __update_date: datetime
     __field_name: str
-    __value: str
+    __new_value: str
+    __old_value: str
+    __author: str
+    __issue_key: str
     
     
-    def __init__(self,date_change:str,field_name:str,value:str):
+    def __init__(self,date_change:str,author:str,field_name:str,new_value:str,old_value:str):
         self.__update_date = datetime.strptime(date_change, "%Y-%m-%dT%H:%M:%S.%f%z").strftime("%Y/%m/%d %H:%M")
         self.__field_name = field_name
-        self.__value = value
-        self.__format_value()
+        self.__author = author
+        self.__new_value = new_value
+        self.__old_value = old_value
+        self.__format_values()
         
         
-    def __format_value(self):
-        if 'date' in self.__field_name and self.__value is not None:
-            self.__value = datetime.strptime(self.__value, "%Y-%m-%d %H:%M:%S.%f").strftime("%Y/%m/%d %H:%M:%S")
+    def __format_values(self):
+        # check the before and after values to see if they are dates;
+        # if so, convert them to dates
+        if 'date' in self.__field_name:
+            if self.__new_value is not None:
+                #self.__new_value = datetime.strptime(self.__new_value, "%Y-%m-%d %H:%M:%S.%f").strftime("%Y/%m/%d %H:%M:%S")
+                self.__new_value = pd.to_datetime(self.__new_value)
+            if self.__old_value is not None:
+                #self.__old_value = datetime.strptime(self.__old_value, "%Y-%m-%d %H:%M:%S.%f").strftime("%Y/%m/%d %H:%M:%S")
+                self.__old_value = pd.to_datetime(self.__old_value)
             
-            
+    
+    @property
+    def issue_key(self):
+        return self.__issue_key
+    
     @property
     def updated_date(self)->datetime:
         return self.__update_date
@@ -1204,9 +1398,16 @@ class Historic_Record():
         return self.__field_name
     
     @property
-    def value(self)->str:
-        return self.__value
+    def new_value(self)->str:
+        return self.__new_value
     
+    @property
+    def old_value(self)->str:
+        return self.__old_value
+    
+    @property
+    def updated_by(self)->str:
+        return self.__author
     
     
 class Issue_Link():
@@ -1216,26 +1417,41 @@ class Issue_Link():
     __type: str
     __inward_desc: str
     __outward_desc: str
-    __inward_issue: Jira_Issue = None
-    __outward_issue: Jira_Issue = None
-    __jira: JIRA
+    __inward_issue: str
+    __outward_issue: str
+    #__jira: JIRA
     __link_obj: dict
 
-    def __init__(self,pJira:JIRA,link_obj):
-        self.__jira = pJira
+    def __init__(self,link_obj):
         self.__link_obj = link_obj
         self.__id = self.__link_obj.id
         self.__type = self.__link_obj.type.name
         self.__inward_desc = self.__link_obj.type.inward
         self.__outward_desc = self.__link_obj.type.outward
-
-        #have to check if there is an issue or not. if not, this attr wont exist.
-        if hasattr(self.__link_obj,'inwardIssue'):
-            self.__inward_issue = Jira_Issue(self.__jira,self.__link_obj.inwardIssue)
         
-        if hasattr(self.__link_obj,'outwardIssue'):
-            self.__outward_issue = Jira_Issue(self.__jira,self.__link_obj.outwardIssue)
-
+        _log.debug(f'loading issue link ID : {self.__id}')
+        #have to check if there is an issue or not. if not, this attr wont exist.
+        try:
+            if hasattr(self.__link_obj,'inwardIssue'):
+                _log.debug(f'Has Inward issue: {self.__link_obj.inwardIssue}')
+                self.__inward_issue = self.__link_obj.inwardIssue
+            else: self.__inward_issue = None
+            
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No inward issue for Issue: {self.__issue_key}',exc_info=True)
+            
+        try:    
+            if hasattr(self.__link_obj,'outwardIssue'):
+                _log.debug(f'Has Outward issue: {self.__link_obj.outwardIssue}')
+                self.__outward_issue = self.__link_obj.outwardIssue
+            else: self.__outward_issue = None
+            
+        except AttributeError:
+            # Error is thrown when a field is empty.
+            _log.debug(f'No outward issue for Issue: {self.__issue_key}',exc_info=True)
+            
+            
     @property
     def link_id(self)->str:
         """Issue Link id"""
@@ -1247,12 +1463,12 @@ class Issue_Link():
         return self.__type
 
     @property
-    def inward_issue(self)->Jira_Issue:
+    def inward_issue(self)->str:
         """Issue that is 'Parent'"""
         return self.__inward_issue
 
     @property
-    def outward_issue(self)->Jira_Issue:
+    def outward_issue(self)->str:
         """Issue that is 'Child'"""
         return self.__outward_issue
 
