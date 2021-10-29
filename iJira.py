@@ -38,7 +38,7 @@ class iJira():
     __labels: dict = {}
     __histories: dict = {}
     __watchers: dict = {}
-
+    __time_in_status: dict = {}
 
     def __init__(self,cert_file_path:str)->None:
         """Initializes interface object with authentication info"""
@@ -57,7 +57,7 @@ class iJira():
                 self.__cert_data = key_cert_file.read()
             #print(f'cert file: {self.__cert_data}')
             
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             # if no file found push error
             _log.error(f'No PEM file found in given location: {self.__cert_file}',exc_info=True)
             raise FileNotFoundError("No .PEM file found!")
@@ -440,6 +440,59 @@ class iJira():
             return self.__labels
 
 
+    def get_time_in_status(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+        """Get the time an issue is in each status and return a dictionary of those results
+
+        Parameters:
+        -----
+            limit (Optional[int], optional): Number of issues to return can be limited. Default is to return All.
+            project_key (Optional[str], optional): Specifiy a Project Key to pull issues from. Defaults to `'FRD'`.
+            return_df (bool, optional): Option to return as Pandas Dataframe instead of dict. Defaults to `False`.
+            force_refresh (bool, optional): Default is `False` - if the issues have already been pulled, dont pull again. 
+                                            If `True` - run a fresh pull.
+                                            
+        Returns:
+        -----
+            dict: By default it returns a dictionary of issue keys with status dictionaries
+        """
+        
+        if force_refresh or len(self.__time_in_status) == 0:
+            _log.info('Refreshing Time In Status Report...')
+        
+            if limit is None:
+
+                limit = int(self.__jira.search_issues(
+                            f'project = {project_key}',
+                                maxResults=1,startAt=0,json_result=True)['total'])
+
+            issues = self.get_issues(limit=limit,project_key=project_key,force_refresh=force_refresh)
+
+            results = {}
+            
+            # row num is used for indexing in the result dictionary
+            rownum = 0
+
+            for issue in issues:
+                for status,val in issue.time_in_status.items():
+                    rownum += 1
+                    results[f'{rownum}']={'issue_key':issue.key,
+                                            'status':status,
+                                            'days':val['days'],
+                                            'hours':val['hours'],
+                                            'minutes':val['minutes']}
+                    
+            # save to global var for reuse
+            self.__time_in_status = results
+            _log.info(f'{len(self.__time_in_status)} time in status records retrieved')
+            
+        # determine how to return results; either dataframe | dict
+        if return_df:
+            df = pd.DataFrame.from_dict(self.__time_in_status,orient='index')
+            return df
+        else:
+            return self.__time_in_status
+
+
     def get_watchers(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
         """Get Watchers and return a dictionary of watchers
 
@@ -630,6 +683,28 @@ class iJira():
         return save_loc
 
 
+    def export_time_in_status_report(self,f_name:str='TimeInStatus',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+        """Saves time in status report out to excel xlsx file
+
+        Parameters:
+        -----
+            f_name (str, optional): File name (NO EXTENSION). Defaults to `'TimeInStatus'`.
+            f_path (str, optional): File Path . Defaults to r`'.\data'`.
+            limit (Optional[int], optional): Number of issues to search through, if none searches all found. Default is to return All.
+            force_refresh (bool, optional): Default is `False` - if the time in status's have already been pulled, dont pull again. 
+                                            If `True` - run a fresh pull.
+                                            
+        Returns:
+        -----
+            str: The path to where the file was saved. 
+        """
+        
+        save_loc = rf'{f_path}\{f_name}.xlsx'
+        self.get_time_in_status(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
+
+        return save_loc
+
+
     def export_watchers_report(self,f_name:str='Watchers',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves watchers report out to excel xlsx file
 
@@ -720,6 +795,7 @@ class Jira_Issue():
     __reporter_key: str
     __reporter_name: str
     __summary: str
+    __time_in_status: dict
     __vote_count: int
     __watchers: dict
     __watcher_count: int
@@ -769,6 +845,7 @@ class Jira_Issue():
         self.__reporter_key = None
         self.__reporter_name = None
         self.__summary = None
+        self.__time_in_status = {}
         self.__vote_count = None
         self.__watchers = {}
         self.__watcher_count = None
@@ -866,14 +943,89 @@ class Jira_Issue():
         
         # set the open and close dates for open age calculation
         self.__calc_time_open()
+        self.__calc_time_in_status()
+    
+    
+    def __set_time_in_status_record(self,status:str,current_date:datetime,previous_date:datetime):
+        """Sets an individual record of time in status
+
+        PARAMETERS:
+        -----
+            status (str): Status value 
+            current_date (datetime): The end date for date calc
+            previous_date (datetime): the Start date for the date calc
+        """
+        
+        time_delta = (current_date - previous_date)
+        days = time_delta.days
+        seconds = time_delta.seconds
+        hours = seconds//3600
+        minutes = (seconds//60)%60
+        
+        self.__time_in_status[status]['days'] += days
+        self.__time_in_status[status]['hours'] += hours
+        self.__time_in_status[status]['minutes'] += minutes
+        
+        
+    def __calc_time_in_status(self):
+        """Used to calculate the time spent in each status for an issue.
+        """
+
+        prev_status = None
+        prev_date = None
+        status_list = []
+        
+        # need to get all distinct status types from History
+        # to pre-fill dictionary
+        [status_list.append(x.new_value.lower()) for x in self.change_history if x.field_name.lower() == 'status' and x.new_value.lower() not in status_list]
+        _log.debug(f'issue : {self.key} | status list: {status_list}')
+        
+        # prefill dictionary to be able to loop through and update items
+        for status in status_list:
+            self.__time_in_status[status] = {'days':0,
+                                            'hours':0,
+                                            'minutes':0,
+                                            'seconds':0}
+        
+        record_history = [x for x in self.change_history 
+                       if x.field_name.lower() == 'status']
+        _log.debug(f'issue: {self.key} | historic rec count: {len(record_history)}')
+        
+        rec_hist_count = len(record_history)
+        
+        # use loop to calc time diff between prev and current record
+        for rec in record_history:
+            
+            cur_date = datetime.strptime(rec.updated_date, self.DATE_FORMAT)
+            
+            if rec_hist_count == 1:
+                cur_date = datetime.now()
+                prev_date = datetime.strptime(rec.updated_date, self.DATE_FORMAT)
+                prev_status = rec.new_value.lower()
+                
+            if prev_status is None:
+                prev_status = rec.new_value.lower()
+                prev_date = datetime.strptime(rec.updated_date, self.DATE_FORMAT)
+                continue
+
+            self.__set_time_in_status_record(prev_status,cur_date,prev_date)
+            
+            # finally put current val into prev val vars
+            prev_status = rec.new_value.lower()
+            prev_date = cur_date
+                
+        # calc last record
+        if rec_hist_count >1:
+            self.__set_time_in_status_record(prev_status,datetime.now(),prev_date)
+        
+        _log.debug(f'issue: {self.key} | status report: {self.__time_in_status}')
         
         
     def __calc_time_open(self):
-        # attempt to calc time an issue is in "open" status   
-        # open is in progress, in review, needs follow up, or scheduled. 
-        # concept is to loop through historic records only looking at status changes
-        # and sum up all time an issue is in the open status. 
-        
+        """Used to calculate the time an issue is in the "Open" status.
+            Open = 'in progress','in review','needs follow up','scheduled'
+        """
+
         # these are the status's that are considered open
         open_status = ['in progress','in review','needs follow up','scheduled']
 
@@ -1332,7 +1484,11 @@ class Jira_Issue():
         """
         return self.__epic_key
 
-        
+    @property
+    def time_in_status(self)->dict:
+        return self.__time_in_status
+    
+    
     @classmethod
     def clean_html(cls,raw_html:str='')->str:
             """Static method for cleaning out HTML tags from text

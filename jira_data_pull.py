@@ -41,7 +41,6 @@ if __name__ == '__main__':
     japi = iJira(r'.\path\to\cert')
     
     # issues report
-    #print(japi.get_issues(limit=100,return_df=True))
     japi.export_issues_report(f_path=save_loc)
 
     # change history report
@@ -61,4 +60,7 @@ if __name__ == '__main__':
     
     # watchers report
     japi.export_watchers_report(f_path=save_loc)
+
+    # Time in Status Report
+    japi.export_time_in_status_report(f_path=save_loc)
 
