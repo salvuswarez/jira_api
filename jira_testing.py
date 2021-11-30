@@ -19,14 +19,14 @@ from iJira import iJira
 
 # # build auth dict
 # oauth_dict = {
-#     'access_token_secret': 'IZt12OXrU13MUAUtFrRgAaXbdhkMuRHr',
-#     'consumer_key': 'FEMAFRDOAuthKey',
-#     'access_token':'elcfe4HorZnjoHhCLXK9vLoXbMZyLNu7',
+#     'access_token_secret': '',
+#     'consumer_key': '',
+#     'access_token':'',
 #     'key_cert':key_cert_data
 # }
 
 # # login and activate jira connection
-# jira = JIRA('https://maestro-api.dhs.gov/jira',oauth=oauth_dict)
+# jira = JIRA('',oauth=oauth_dict)
 
 #----------------------------------------------------------------------------
 
