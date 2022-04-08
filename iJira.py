@@ -27,6 +27,8 @@ _log = logging.getLogger(__name__)
 class iJira():
     """Interface for Jira API commands
     """
+    DATE_FORMAT = "%Y/%m/%d %H:%M"
+    
     __cert_file: str
     __cert_data: object
     __jira: JIRA
@@ -39,12 +41,14 @@ class iJira():
     __histories: dict = {}
     __watchers: dict = {}
     __time_in_status: dict = {}
-
+    __status_issue_count_time_series: dict
+    
     def __init__(self,cert_file_path:str)->None:
         """Initializes interface object with authentication info"""
         
         self.__cert_file = cert_file_path
         self.__is_logged_in = False
+        self.__status_issue_count_time_series = {}
         self.__load_interface()
 
 
@@ -683,6 +687,64 @@ class iJira():
         return save_loc
 
 
+    def export_issue_count_time_series_report(self,f_name:str='IssueCountTimeSeries',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+        """[summary]
+
+        PARAMETERS
+        -----
+            f_name (str, optional): File name (NO EXTENSION). Defaults to `'IssueCountTimeSeries'`.
+            f_path (str, optional): File Path . Defaults to r`'.\data'`.
+            limit (Optional[int], optional): Number of issues to search through, if none searches all found. Default is to return All.
+            force_refresh (bool, optional): Default is `False` - if the issue counts have already been pulled, dont pull again. 
+                                            If `True` - run a fresh pull.                   
+        Returns:
+        -----
+            str: The path to where the file was saved. 
+        """
+        _log.info('Refreshing Issue Count by Status Report...')
+        issues = self.get_issues(limit=limit,force_refresh=force_refresh)
+        status_change_records = [r for hl in [i.change_history for i in issues] for r in hl if r.field_name == 'status']
+        status_set = {s:0 for s in list(set([str(c.new_value).lower() for c in status_change_records]))}
+        update_dates = [datetime.strptime(c.updated_date, self.DATE_FORMAT).strftime("%Y/%m/%d") for c in status_change_records]
+        save_loc = rf'{f_path}\{f_name}.xlsx'
+        expanded_dates = pd.date_range(start=min(update_dates),end=max(update_dates),freq='D',normalize=True,closed=None)
+        
+        # preload dictionary in order to update the counts
+        for d in expanded_dates:
+            d = d.strftime("%Y/%m/%d")
+            self.__status_issue_count_time_series[str(d)] = status_set.copy()
+
+        for d in expanded_dates:
+            idx_date = datetime.date(d).strftime("%Y/%m/%d")
+            _log.debug(f'record - {idx_date} ')
+            tmp_status = {}
+            for status in status_set:
+                total = sum([1 for s in status_change_records 
+                             if idx_date >= s.start_date.strftime("%Y/%m/%d") 
+                             and idx_date <=s.end_date.strftime("%Y/%m/%d") 
+                             and s.new_value.lower() == status])
+                _log.debug(f'date: {idx_date} | status: "{status}" | ttl: {total}')
+                tmp_status[status] = total
+                
+            # after status loop set statuss to date in results dict
+            self.__status_issue_count_time_series[str(idx_date)] = tmp_status
+            _log.debug(f'UPDATED RECORD - {idx_date} | {self.__status_issue_count_time_series[str(idx_date)]}')
+                
+        _log.debug(f'Dict Time series: {self.__status_issue_count_time_series}')
+                
+        temp_dict = {}
+        idx = 0
+        
+        _log.debug(f'Flattening Issue count time series')
+        for d,s in self.__status_issue_count_time_series.items():
+            _log.debug(f'Date: {d} | statuses: {s}')
+            for k,v in s.items():
+                temp_dict[idx] = {'date':d,'status':k,'total':v,'refresh_date':datetime.now()}
+                idx +=1
+
+        pd.DataFrame.from_dict(temp_dict,orient='index').to_excel(save_loc)
+        return save_loc
+
     def export_time_in_status_report(self,f_name:str='TimeInStatus',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves time in status report out to excel xlsx file
 
@@ -955,7 +1017,7 @@ class Jira_Issue():
             current_date (datetime): The end date for date calc
             previous_date (datetime): the Start date for the date calc
         """
-        
+        # check here to build out date range for status
         time_delta = (current_date - previous_date)
         days = time_delta.days
         seconds = time_delta.seconds
@@ -970,31 +1032,32 @@ class Jira_Issue():
     def __calc_time_in_status(self):
         """Used to calculate the time spent in each status for an issue.
         """
-
+        status_change_records = [r for r in self.change_history if r.field_name == 'status']
+        status_set = {s:0 for s in list(set([str(c.new_value).lower() for c in status_change_records]))}
         prev_status = None
         prev_date = None
         status_list = []
         
         # need to get all distinct status types from History
         # to pre-fill dictionary
-        [status_list.append(x.new_value.lower()) for x in self.change_history if x.field_name.lower() == 'status' and x.new_value.lower() not in status_list]
+        #[status_list.append(x.new_value.lower()) for x in self.change_history if x.field_name.lower() == 'status' and x.new_value.lower() not in status_list]
         _log.debug(f'issue : {self.key} | status list: {status_list}')
         
         # prefill dictionary to be able to loop through and update items
-        for status in status_list:
+        for status in status_set:
             self.__time_in_status[status] = {'days':0,
                                             'hours':0,
                                             'minutes':0,
                                             'seconds':0}
         
-        record_history = [x for x in self.change_history 
-                       if x.field_name.lower() == 'status']
-        _log.debug(f'issue: {self.key} | historic rec count: {len(record_history)}')
+        #record_history = [x for x in self.change_history 
+         #              if x.field_name.lower() == 'status']
+        _log.debug(f'issue: {self.key} | historic rec count: {len(status_change_records)}')
         
-        rec_hist_count = len(record_history)
+        rec_hist_count = len(status_change_records)
         
         # use loop to calc time diff between prev and current record
-        for rec in record_history:
+        for rec in status_change_records:
             
             cur_date = datetime.strptime(rec.updated_date, self.DATE_FORMAT)
             
@@ -1002,12 +1065,13 @@ class Jira_Issue():
                 cur_date = datetime.now()
                 prev_date = datetime.strptime(rec.updated_date, self.DATE_FORMAT)
                 prev_status = rec.new_value.lower()
+                #self.__time_in_status[prev_status] = rec.new_value
                 
             if prev_status is None:
                 prev_status = rec.new_value.lower()
                 prev_date = datetime.strptime(rec.updated_date, self.DATE_FORMAT)
                 continue
-
+            
             self.__set_time_in_status_record(prev_status,cur_date,prev_date)
             
             # finally put current val into prev val vars
@@ -1115,6 +1179,38 @@ class Jira_Issue():
         self.__issue_record['open_days'] = self.__open_days = days_open
          
     
+    def __update_historic_status_records(self):
+        """Updates all status records in the change history with their respective
+        date ranges
+        """
+        
+        prev_date = None
+        cur_date = None
+        prev_status = None
+        status_changes = [r for r in self.__historic_records if r.field_name == 'status']
+        rec_count = len(status_changes)
+        
+        for r in status_changes:
+            cur_date = datetime.strptime(r.updated_date, self.DATE_FORMAT)
+            
+            if rec_count == 1:
+                cur_date = datetime.now()
+                prev_date = datetime.strptime(r.updated_date, self.DATE_FORMAT)
+                prev_status = r
+                
+            if prev_status is None:
+                prev_status = r
+                prev_date = datetime.strptime(r.updated_date, self.DATE_FORMAT)
+                continue
+        
+            prev_status.set_date_range(prev_date,cur_date)
+            prev_status = r
+            prev_date = cur_date
+        
+        if rec_count > 1:
+            prev_status.set_date_range(prev_date,datetime.now())
+            
+            
     @property
     def key(self)->str:
         """Issue Key string from Jira
@@ -1145,6 +1241,7 @@ class Jira_Issue():
         Returns:
             list: Returns a list of Historic Record items
         """
+
         if not self.__historic_records:
             _log.debug(f'Issue: {self.key} | Change History first load')
             for rec in self.__histories:
@@ -1152,9 +1249,11 @@ class Jira_Issue():
                     for item in rec.items:
                         self.__historic_records.append(Historic_Record(
                             rec.created,rec.author,item.field,item.toString,item.fromString))
-            
             _log.debug(f'Historic record count: {len(self.__historic_records)}')
             _log.debug(f'Issue: {self.key} | Historic Records: {[x.updated_date for x in self.__historic_records]}')
+            
+            # get date ranges for status records
+            self.__update_historic_status_records()
             
         return self.__historic_records
     
@@ -1518,7 +1617,8 @@ class Historic_Record():
     __old_value: str
     __author: str
     __issue_key: str
-    
+    __start_date: str
+    __end_date: str
     
     def __init__(self,date_change:str,author:str,field_name:str,new_value:str,old_value:str):
         self.__update_date = datetime.strptime(date_change, "%Y-%m-%dT%H:%M:%S.%f%z").strftime("%Y/%m/%d %H:%M")
@@ -1526,6 +1626,8 @@ class Historic_Record():
         self.__author = author
         self.__new_value = new_value
         self.__old_value = old_value
+        self.__start_date = None
+        self.__end_date = None
         self.__format_values()
         
         
@@ -1540,7 +1642,11 @@ class Historic_Record():
                 #self.__old_value = datetime.strptime(self.__old_value, "%Y-%m-%d %H:%M:%S.%f").strftime("%Y/%m/%d %H:%M:%S")
                 self.__old_value = pd.to_datetime(self.__old_value)
             
-    
+    def set_date_range(self,start:str,end:str):
+        self.__start_date = start
+        self.__end_date = end
+
+        
     @property
     def issue_key(self):
         return self.__issue_key
@@ -1548,6 +1654,14 @@ class Historic_Record():
     @property
     def updated_date(self)->datetime:
         return self.__update_date
+    
+    @property
+    def start_date(self)->datetime:
+        return self.__start_date
+    
+    @property
+    def end_date(self)->datetime:
+        return self.__end_date
     
     @property
     def field_name(self)->str:
