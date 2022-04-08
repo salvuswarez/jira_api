@@ -12,6 +12,8 @@ jira_api_env.tar.gz
 jira_api_env/
 logs/*.*
 _archive/
+jira_data_pull_test.py
+testing/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

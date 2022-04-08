@@ -5,8 +5,9 @@
 # current version: 1
 # 
 # Description:
-#   This interface is intended to offer access to all data stored within Jira. It requires no manual login as it uses a 
-# preset authentication. 
+#   This interface is intended to offer access to all data stored within
+#   Jira. It requires no manual login as it uses a 
+#   preset authentication. 
 #
 #
 
