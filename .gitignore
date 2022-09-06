@@ -153,3 +153,5 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+jira_data_pull_test.py
+jira_data_pull_test.py

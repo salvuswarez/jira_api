@@ -35,8 +35,8 @@ def run():
     
 if __name__ == '__main__':
     run()
-    #save_loc = r'\\fema.net\hqss\OPPASHARE\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
-    save_loc = r'\\hqli2f8\hqshare\Office of Policy and Program Analysis (OPPA)\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
+    save_loc = r'\\fema.net\hqss\OPPASHARE\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
+    #save_loc = r'\\hqli2f8\hqshare\Office of Policy and Program Analysis (OPPA)\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
     # perform auth to activate connection to api
     japi = iJira(r'.\auth\oauth.pem')
     
