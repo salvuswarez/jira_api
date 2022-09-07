@@ -35,37 +35,36 @@ def run():
     
 if __name__ == '__main__':
     run()
-    save_loc = r'\\fema.net\hqss\OPPASHARE\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
-    #save_loc = r'\\hqli2f8\hqshare\Office of Policy and Program Analysis (OPPA)\Enterprise Analytics Division\DashboardProjects\TableauDataSources\Jira_FRD'
     # perform auth to activate connection to api
-    japi = iJira(r'.\auth\oauth.pem')
+    japi = iJira(config_file_path='config.ini')
+    japi.set_active_project_key = 'FDT'
     
     # issues report
     #print(japi.get_issues(limit=20,return_df=True))
-    japi.export_issues_report(f_path=save_loc)
+    #japi.export_issues_report(limit=25)
 
     # change history report
-    japi.export_change_history_report(f_path=save_loc)
+    #japi.export_change_history_report(limit=25)
     #print(japi.get_histories(limit=2,return_df=True))
     
     # components report
-    japi.export_components_report(f_path=save_loc)
+    #japi.export_components_report(f_path=save_loc)
 
     # labels report
-    japi.export_label_report(f_path=save_loc)
+    #japi.export_label_report(f_path=save_loc)
 
     # comments report
-    japi.export_comments_report(f_path=save_loc)
+    #japi.export_comments_report(f_path=save_loc)
 
     # linked issues / this might also be subtasks
-    japi.export_issue_links_report(f_path=save_loc)
+    #japi.export_issue_links_report(f_path=save_loc)
     
     # watchers report
-    japi.export_watchers_report(f_path=save_loc)
+    #japi.export_watchers_report(f_path=save_loc)
 
     # time in status report
     #print(japi.get_time_in_status(limit=20))
-    japi.export_time_in_status_report(f_path=save_loc)
+    japi.export_time_in_status_report(limit=25)
     
     # status issue count time series report
-    japi.export_issue_count_time_series_report(f_path=save_loc)
+    japi.export_issue_count_time_series_report(limit=25)

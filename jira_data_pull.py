@@ -35,32 +35,32 @@ def run():
     
 if __name__ == '__main__':
     run()
-    save_loc = r'\\path\to\save\loc'
+    config_file_path = r'\\path\to\save\loc'
     
     # perform auth to activate connection to api
-    japi = iJira(r'.\path\to\cert')
+    japi = iJira(config_file_path=config_file_path)
     
     # issues report
-    japi.export_issues_report(f_path=save_loc)
+    japi.export_issues_report()
 
     # change history report
-    japi.export_change_history_report(f_path=save_loc)
+    japi.export_change_history_report()
     
     # components report
-    japi.export_components_report(f_path=save_loc)
+    japi.export_components_report()
 
     # labels report
-    japi.export_label_report(f_path=save_loc)
+    japi.export_label_report()
 
     # comments report
-    japi.export_comments_report(f_path=save_loc)
+    japi.export_comments_report()
 
     # linked issues / this might also be subtasks
-    japi.export_issue_links_report(f_path=save_loc)
+    japi.export_issue_links_report()
     
     # watchers report
-    japi.export_watchers_report(f_path=save_loc)
+    japi.export_watchers_report()
 
     # Time in Status Report
-    japi.export_time_in_status_report(f_path=save_loc)
+    japi.export_time_in_status_report()
 

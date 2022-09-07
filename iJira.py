@@ -20,6 +20,7 @@ import logging
 import pandas as pd
 import re
 from typing import Optional
+import configparser
 
 # module's logger
 _log = logging.getLogger(__name__)
@@ -32,6 +33,9 @@ class iJira():
     
     __cert_file: str
     __cert_data: object
+    __personal_access_token: str
+    __active_project_key: str
+    __config_parser: configparser.ConfigParser
     __jira: JIRA
     __is_logged_in: bool
     __issues: list = []
@@ -44,44 +48,76 @@ class iJira():
     __time_in_status: dict = {}
     __status_issue_count_time_series: dict
     
-    def __init__(self,cert_file_path:str)->None:
+    def __init__(self, config_file_path:str)->None:
         """Initializes interface object with authentication info"""
         
-        self.__cert_file = cert_file_path
+        self.__config_parser = self.__load_config(config_file_path)
+        self.__active_project_key = self.__config_parser['authentication']['default_project_key']
+        self.__personal_access_token = self.__config_parser['authentication']['personal_access_token']
+        #self.__cert_file = self.__config_parser['authentication']['cert_file_path']
+        
         self.__is_logged_in = False
         self.__status_issue_count_time_series = {}
         self.__load_interface()
 
 
+    def __load_config(self,config_file_path:str)->configparser.ConfigParser:
+        # load in the config file here
+        """Loads in config details from default location
+
+        Args:
+            config_file_path (str, optional): Path to config file.
+
+        """
+        _log.debug('loading config info...')
+        config = configparser.ConfigParser()
+        config.read(config_file_path)
+        self.__config_parser = config
+        
+        return self.__config_parser
+        
     def __load_interface(self)->None:
         """Performs API login from interface initialization"""
         
-        try:
-            # load private key data into var
-            with open(self.__cert_file, 'r') as key_cert_file:
-                self.__cert_data = key_cert_file.read()
-            #print(f'cert file: {self.__cert_data}')
+        # try:
+        #     # load private key data into var
+        #     with open(self.__cert_file, 'r') as key_cert_file:
+        #         self.__cert_data = key_cert_file.read()
+        #     #print(f'cert file: {self.__cert_data}')
             
-        except FileNotFoundError:
-            # if no file found push error
-            _log.error(f'No PEM file found in given location: {self.__cert_file}',exc_info=True)
-            raise FileNotFoundError("No .PEM file found!")
+        # except FileNotFoundError:
+        #     # if no file found push error
+        #     _log.error(f'No PEM file found in given location: {self.__cert_file}',exc_info=True)
+        #     raise FileNotFoundError("No .PEM file found!")
 
-        # get auth dict from txt file
-        oauth = self.__read_in_auth_dict()
+        # # get auth dict from txt file
+        # oauth = self.__read_in_auth_dict()
 
-        # add in cert data file
-        oauth['key_cert'] = self.__cert_data
-
+        # # add in cert data file
+        # oauth['key_cert'] = self.__cert_data
+        #TODO: refactor this function to accept other methods of auth
         try: # to login here, if so set flag __is_logged_in
-            self.__jira = JIRA('https://maestro-api.dhs.gov/jira',oauth=oauth)
+            #self.__jira = JIRA('https://maestro-api.dhs.gov/jira',oauth=oauth)
+            # try to login with PAT instead of oauth
+            headers = JIRA.DEFAULT_OPTIONS["headers"].copy()
+            headers['Authorization'] = f"Bearer {self.__personal_access_token}"
+            self.__jira = JIRA('https://maestro-api.dhs.gov/jira/',options={"headers":headers})
             self.__is_logged_in = True
-        except Exception as e:
+        except Exception:
             #TODO: replace exception with proper faild login exception
             _log.error('Failed to login',exc_info=True)
             self.__is_logged_in = False
 
 
+    @property
+    def active_project_key(self)->str:
+        return self.__active_project_key
+
+    @active_project_key.setter
+    def set_active_project_key(self,key:str)->None:
+        self.__active_project_key = key
+    
+    
     @property
     def jira_obj(self):
         """the Jira object is the JIRA python library API object
@@ -102,7 +138,7 @@ class iJira():
         return self.__is_logged_in
 
    
-    def get_issues(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_issues(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get issue objects and return as list of issue objects
 
         Parameters:
@@ -117,7 +153,10 @@ class iJira():
         -----
             Defaults to list, but able to return pandas dataframe if needed
         """
-        
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         # reuse a previous pull of issues if it's not empty
         if force_refresh or len(self.__issues) == 0:
             _log.info('Refreshing Issues...')
@@ -145,7 +184,7 @@ class iJira():
             return self.__issues
 
 
-    def get_issue_links(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_issue_links(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get Issue Links and return a list of Issue Links
 
         Parameters:
@@ -160,7 +199,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of issue keys with issue link dictionaries of {id:name}
         """
-        
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         if force_refresh or len(self.__issue_links) == 0:
             _log.info('Refreshing Issue Links...')
             
@@ -215,7 +257,7 @@ class iJira():
             return self.__issue_links
 
 
-    def get_histories(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_histories(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get Historic records for all Issues
 
         Parameters:
@@ -230,7 +272,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of Historic Records
         """
-        
+        if not project_key:
+            project_key = self.active_project_key  
+            
+                  
         if force_refresh or len(self.__histories) == 0:
             _log.info('Refreshing Histories...')
             
@@ -279,7 +324,7 @@ class iJira():
             return self.__histories
 
 
-    def get_comments(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_comments(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get Comments and return a dictionary of comments
 
         Parameters:
@@ -294,7 +339,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of issue keys with comment dictionaries of {id:name}
         """
-        
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         if force_refresh or len(self.__comments) == 0:
             _log.info('Refreshing Comments...')
             
@@ -335,7 +383,7 @@ class iJira():
             return self.__comments    
 
 
-    def get_components(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_components(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get Components and return a dictionary of components
 
         Parameters:
@@ -350,7 +398,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of issue keys with component dictionaries of {id:name}
         """
-        
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         if force_refresh or len(self.__components) == 0:
             _log.info('Refreshing Components...')
             
@@ -391,7 +442,7 @@ class iJira():
             return self.__components
 
 
-    def get_labels(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_labels(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get Labels and return a dictionary of labels
 
         Parameters:
@@ -406,7 +457,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of issue keys with label dictionaries of {id:name}
         """
-        
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         if force_refresh or len(self.__labels) == 0:
             _log.info('Refreshing Labels...')
             
@@ -445,7 +499,7 @@ class iJira():
             return self.__labels
 
 
-    def get_time_in_status(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_time_in_status(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get the time an issue is in each status and return a dictionary of those results
 
         Parameters:
@@ -460,7 +514,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of issue keys with status dictionaries
         """
-        
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         if force_refresh or len(self.__time_in_status) == 0:
             _log.info('Refreshing Time In Status Report...')
         
@@ -498,7 +555,7 @@ class iJira():
             return self.__time_in_status
 
 
-    def get_watchers(self,limit:Optional[int]=None,project_key:Optional[str]='FRD',return_df:bool=False,force_refresh:bool=False):
+    def get_watchers(self,limit:Optional[int]=None,project_key:Optional[str]=None,return_df:bool=False,force_refresh:bool=False):
         """Get Watchers and return a dictionary of watchers
 
         Parameters:
@@ -513,7 +570,10 @@ class iJira():
         -----
             dict: By default it returns a dictionary of issue keys with watcher dictionaries of {id:name}
         """
-
+        if not project_key:
+            project_key = self.active_project_key
+            
+            
         if force_refresh or len(self.__watchers) == 0:
             _log.info('Refreshing Watchers...')
             
@@ -556,7 +616,7 @@ class iJira():
             return self.__watchers
 
 
-    def export_issues_report(self,f_name:str='Issues',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_issues_report(self,f_name:str='Issues',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves issues report out to excel xlsx file
 
         Parameters:
@@ -571,14 +631,17 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        #TODO: add project key to file name as well
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_issues(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc,index=False)
 
         return save_loc
 
 
-    def export_issue_links_report(self,f_name:str='IssueLinks',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_issue_links_report(self,f_name:str='IssueLinks',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves issue links report out to excel xlsx file
 
         Parameters:
@@ -593,14 +656,16 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_issue_links(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    def export_change_history_report(self,f_name:str='ChangeHistory',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_change_history_report(self,f_name:str='ChangeHistory',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves historic report out to excel xlsx file
 
         Parameters:
@@ -615,14 +680,16 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_histories(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    def export_comments_report(self,f_name:str='Comments',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_comments_report(self,f_name:str='Comments',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves components report out to excel xlsx file
 
         Parameters:
@@ -637,14 +704,16 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_comments(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    def export_components_report(self,f_name:str='Components',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_components_report(self,f_name:str='Components',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves components report out to excel xlsx file
 
         Parameters:
@@ -659,14 +728,16 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_components(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    def export_label_report(self,f_name:str='Labels',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_label_report(self,f_name:str='Labels',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves labels report out to excel xlsx file
 
         Parameters:
@@ -681,14 +752,16 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_labels(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    def export_issue_count_time_series_report(self,f_name:str='IssueCountTimeSeries',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_issue_count_time_series_report(self,f_name:str='IssueCountTimeSeries',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """[summary]
 
         PARAMETERS
@@ -702,12 +775,15 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
         _log.info('Refreshing Issue Count by Status Report...')
         issues = self.get_issues(limit=limit,force_refresh=force_refresh)
         status_change_records = [r for hl in [i.change_history for i in issues] for r in hl if r.field_name == 'status']
         status_set = {s:0 for s in list(set([str(c.new_value).lower() for c in status_change_records]))}
         update_dates = [datetime.strptime(c.updated_date, self.DATE_FORMAT).strftime("%Y/%m/%d") for c in status_change_records]
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         expanded_dates = pd.date_range(start=min(update_dates),end=max(update_dates),freq='D',normalize=True,closed=None)
         
         # preload dictionary in order to update the counts
@@ -746,7 +822,7 @@ class iJira():
         pd.DataFrame.from_dict(temp_dict,orient='index').to_excel(save_loc)
         return save_loc
 
-    def export_time_in_status_report(self,f_name:str='TimeInStatus',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_time_in_status_report(self,f_name:str='TimeInStatus',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves time in status report out to excel xlsx file
 
         Parameters:
@@ -761,14 +837,16 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_time_in_status(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    def export_watchers_report(self,f_name:str='Watchers',f_path:str=r'.\data',limit:Optional[int]=None,force_refresh:bool=False)->str:
+    def export_watchers_report(self,f_name:str='Watchers',f_path:Optional[str]=None,limit:Optional[int]=None,force_refresh:bool=False)->str:
         """Saves watchers report out to excel xlsx file
 
         Parameters:
@@ -783,38 +861,40 @@ class iJira():
         -----
             str: The path to where the file was saved. 
         """
-        
-        save_loc = rf'{f_path}\{f_name}.xlsx'
+        if not f_path:
+            f_path = self.__config_parser['data']['report_save_location']
+            
+        save_loc = rf'{f_path}\{self.active_project_key + "_" + f_name}.xlsx'
         self.get_watchers(force_refresh=force_refresh,limit=limit,return_df=True).to_excel(save_loc)
 
         return save_loc
 
 
-    @classmethod
-    def __read_in_auth_dict(cls,path:Optional[str] = r'.\auth\auth_dict.txt')->dict:
-        """Reads in a text file in dictionary format
+    # @classmethod
+    # def __read_in_auth_dict(cls,path:Optional[str] = r'.\auth\auth_dict.txt')->dict:
+    #     """Reads in a text file in dictionary format
 
-        Parameters:
-        -----
-            path (Optional[str], optional): Path to auth file. Defaults to `.\\auth\\auth_dict.txt`.
+    #     Parameters:
+    #     -----
+    #         path (Optional[str], optional): Path to auth file. Defaults to `.\\auth\\auth_dict.txt`.
 
-        Raises:
-        -----
-            FileNotFoundError: if no auth file found in default location and no location provided
+    #     Raises:
+    #     -----
+    #         FileNotFoundError: if no auth file found in default location and no location provided
 
-        Returns:
-        -----
-            dict: Dictionary object for use in authentication
-        """
-        try:
-            f = open(path,'r')
-            d = {}
-            d = le(f.read())
-        except FileNotFoundError as e:
-            _log.error(f'Could not find Auth File in : {path}',exec_info=True)
-            raise FileNotFoundError('No Auth file found!')
-        finally:
-            return d
+    #     Returns:
+    #     -----
+    #         dict: Dictionary object for use in authentication
+    #     """
+    #     try:
+    #         f = open(path,'r')
+    #         d = {}
+    #         d = le(f.read())
+    #     except FileNotFoundError as e:
+    #         _log.error(f'Could not find Auth File in : {path}',exec_info=True)
+    #         raise FileNotFoundError('No Auth file found!')
+    #     finally:
+    #         return d
 
 
 class Jira_Issue():
