@@ -27,7 +27,8 @@ _log = logging.getLogger(__name__)
 
 
 class iJira():
-    """Interface for Jira API commands
+    """Interface for working with Jira API. It allows you to choose a 
+    Project and query content from it. 
     """
     DATE_FORMAT = "%Y/%m/%d %H:%M"
     
@@ -49,7 +50,13 @@ class iJira():
     __status_issue_count_time_series: dict
     
     def __init__(self, config_file_path:str)->None:
-        """Initializes interface object with authentication info"""
+        """Initializes a JIRA object allowing access to begin querying 
+        content from a given Project
+
+        Args:
+            config_file_path (str): UNC path to the config file to be 
+            used
+        """
         
         self.__config_parser = self.__load_config(config_file_path)
         self.__active_project_key = self.__config_parser['authentication']['default_project_key']
@@ -103,6 +110,8 @@ class iJira():
             headers['Authorization'] = f"Bearer {self.__personal_access_token}"
             self.__jira = JIRA('https://maestro-api.dhs.gov/jira/',options={"headers":headers})
             self.__is_logged_in = True
+            _log.info("Successfull Login | Project: " \
+                f"{self.__config_parser['authentication']['default_project_key']}")
         except Exception:
             #TODO: replace exception with proper faild login exception
             _log.error('Failed to login',exc_info=True)
@@ -111,11 +120,24 @@ class iJira():
 
     @property
     def active_project_key(self)->str:
+        """The currently selected Jira Project
+
+        Returns:
+            str: Project name / Key
+        """
         return self.__active_project_key
 
     @active_project_key.setter
-    def set_active_project_key(self,key:str)->None:
+    def active_project_key(self,key:str)->None:
+        """Change / set the currently selected Jira Project to be used
+
+        Args:
+            key (str): Project Key / Name
+        """
+        # TODO: may need to force a content reset if project is changed
         self.__active_project_key = key
+        
+        return self.active_project_key
     
     
     @property
